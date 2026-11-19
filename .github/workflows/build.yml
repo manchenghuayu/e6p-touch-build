@@ -1,0 +1,58 @@
+name: build-e6p-touch-module
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu make bc kmod
+
+      - name: Fetch kernel source 6.18.21
+        run: |
+          curl -fL --retry 3 -o linux.tar.xz https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.18.21.tar.xz
+          tar -xf linux.tar.xz
+
+      - name: Prepare kernel tree
+        run: |
+          cp kernel.config linux-6.18.21/.config
+          cd linux-6.18.21
+          ./scripts/config --set-str CONFIG_INITRAMFS_SOURCE ""
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) modules_prepare
+
+      - name: Build touchscreen module
+        run: |
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -C linux-6.18.21 M=$GITHUB_WORKSPACE/module
+          echo "=== modinfo ==="
+          modinfo module/hynitron_e6p_ts.ko || true
+          echo "=== vermagic check ==="
+          modinfo -F vermagic module/hynitron_e6p_ts.ko
+
+      - name: Push built module to 'artifacts' branch
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan artifacts
+          git rm -rf --cached -q . 2>/dev/null || true
+          rm -rf linux-6.18.21 linux.tar.xz .github kernel.config
+          rm -f module/hynitron_e6p_ts.o module/hynitron_e6p_ts.mod module/*.mod.c module/.*.cmd module/Module.markers module/Module.symvers 2>/dev/null
+          git add -f module/hynitron_e6p_ts.ko
+          git commit -m "built module $(date -u +%FT%TZ)"
+          git push -f origin artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e6p-touch-module
+          path: module/hynitron_e6p_ts.ko

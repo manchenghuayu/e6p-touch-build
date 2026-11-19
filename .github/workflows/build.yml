@@ -33,7 +33,7 @@ jobs:
 
       - name: Build touchscreen module
         run: |
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -C linux-6.18.21 M=$GITHUB_WORKSPACE/module
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- KBUILD_MODPOST_WARN=1 -C linux-6.18.21 M=$GITHUB_WORKSPACE/module
           echo "=== modinfo ==="
           modinfo module/hynitron_e6p_ts.ko || true
           echo "=== vermagic check ==="
